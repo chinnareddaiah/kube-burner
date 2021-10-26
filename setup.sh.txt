@@ -1,0 +1,3 @@
+kubectl create sa kube-burner-service-account -n stress-testing
+kubectl apply -f role/clusterRole.yaml
+kubectl apply -f role/clusterRoleBinding.yaml

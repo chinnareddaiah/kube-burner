@@ -1,0 +1,6 @@
+#!/bin/bash
+kubectl delete clusterrolebinding kube-burner-cluster-role-binding
+kubectl delete clusterrole kube-burner-cluster-role
+kubectl delete ns stress-testing
+
+echo "*****All Kube-Burner related dependencies are deleted successfully*****"

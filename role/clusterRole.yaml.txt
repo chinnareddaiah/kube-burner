@@ -1,0 +1,8 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-burner-cluster-role
+rules:
+  - apiGroups: ["", "extensions", "apps"]
+    resources: ["pods","deployments","namespaces","replicasets","services","secrets","configmaps"]
+    verbs: ["get", "list", "watch", "create", "update","delete"]

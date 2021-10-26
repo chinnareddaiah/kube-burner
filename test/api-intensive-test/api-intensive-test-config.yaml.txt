@@ -1,0 +1,153 @@
+apiVersion: v1
+data:
+  kube-burner-config: |
+    ---
+    global:
+      writeToFile: true
+      metricsDirectory: collected-metrics
+      measurements:
+        - name: podLatency
+          esIndex: kube-burner
+
+
+    jobs:
+      - name: create-objects
+        jobIterations: 6
+        jobIterationDelay: 10s
+        qps: 20
+        burst: 20
+        namespacedIterations: false
+        namespace: stress-testing
+        waitWhenFinished: true
+        podWait: true
+        maxWaitTimeout: 90s
+        jobPause: 300s
+        verifyObjects: true
+        errorOnVerify: true
+        objects:
+
+          - objectTemplate: /etc/kube-burner/config-map-template.yaml
+            replicas: 1
+
+          - objectTemplate: /etc/kube-burner/secret-template.yaml
+            replicas: 1
+
+          - objectTemplate: /etc/kube-burner/service-template.yaml
+            replicas: 1
+
+          - objectTemplate: /etc/kube-burner/deployment-template.yaml
+            replicas: 1
+            inputVars:
+              containerImage: k8s.gcr.io/pause:3.1
+
+      - name: api-intensive-remove
+        jobType: delete
+        waitForDeletion: true
+        objects:
+        - kind: Deployment
+          labelSelector: {kube-burner-job: create-objects}
+          apiVersion: apps/v1
+
+      - name: ensure-pods-removal
+        jobType: delete
+        waitForDeletion: true
+        objects:
+        - kind: Pod
+          labelSelector: {kube-burner-job: create-objects}
+
+      - name: remove-services
+        jobType: delete
+        waitForDeletion: true
+        objects:
+        - kind: Service
+          labelSelector: {kube-burner-job: create-objects}
+
+      - name: remove-configmaps-secrets
+        jobType: delete
+        objects:
+        - kind: ConfigMap
+          labelSelector: {kube-burner-job: create-objects}
+        - kind: Secret
+          labelSelector: {kube-burner-job: create-objects}
+
+  deployment-template: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: deployment-api-intensive-{{.Iteration}}
+      labels:
+        group: load
+        svc: api-intensive-{{.Iteration}}
+    spec:
+      replicas: 50
+      selector:
+        matchLabels:
+          name: pod-api-intensive-{{.Iteration}}
+      template:
+        metadata:
+          labels:
+            group: load
+            name: pod-api-intensive-{{.Iteration}}
+        spec:
+          containers:
+          - image: {{.containerImage}}
+            name: pod-api-intensive-{{.Iteration}}
+            resources:
+              requests:
+                cpu: 10m
+                memory: 10M
+            volumeMounts:
+              - name: configmap
+                mountPath: /var/configmap
+              - name: secret
+                mountPath: /var/secret
+          dnsPolicy: Default
+          terminationGracePeriodSeconds: 1
+          # Master node specific toleration.
+          # tolerations:
+          # - key: "node-role.kubernetes.io/master"
+          #   operator: "Exists"
+          #   effect: "NoSchedule"
+          volumes:
+            - name: configmap
+              configMap:
+                name: configmap-{{.Iteration}}
+            - name: secret
+              secret:
+                secretName: secret-{{.Iteration}}
+
+  config-map-template: |
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: configmap-{{.Iteration}}
+    data:
+      data.yaml: |-
+        a: 1
+        b: 2
+        c: 3
+
+  secret-template: |
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: secret-{{.Iteration}}
+    type: Opaque
+    data:
+      password: Zm9vb29vb29vb29vb29vbwo=
+
+  service-template: |
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: service-{{.Iteration}}
+    spec:
+      selector:
+        svc: api-intensive-{{.Iteration}}
+      ports:
+      - port: 80
+        targetPort: 80
+
+kind: ConfigMap
+metadata:
+  name: kube-burner-configmap

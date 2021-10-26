@@ -1,0 +1,73 @@
+apiVersion: v1
+data:
+  kube-burner-config: |
+    ---
+    global:
+      writeToFile: true
+      metricsDirectory: collected-metrics
+      measurements:
+        - name: podLatency
+          esIndex: kube-burner
+          thresholds:
+          - conditionType: Ready
+            metric: Avg
+            threshold: 4s
+
+
+    jobs:
+      - name: create-objects
+        jobIterations: 5
+        jobIterationDelay: 30s
+        qps: 20
+        burst: 20
+        namespacedIterations: false
+        namespace: stress-testing
+        waitWhenFinished: true
+        podWait: true
+        maxWaitTimeout: 900s
+        jobPause: 600s
+        verifyObjects: true
+        errorOnVerify: true
+        objects:
+
+          - objectTemplate: /etc/kube-burner/deployment-template.yaml
+            replicas: 1
+            inputVars:
+              containerImage: gcr.io/google_containers/pause-amd64:3.0
+
+      - name: remove-objects
+        jobType: delete
+        objects:
+        - kind: Deployment
+          labelSelector: {kube-burner-job: create-objects}
+          apiVersion: apps/v1
+
+  deployment-template: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: kubelet-density-deployment-{{.Iteration}}
+      labels:
+        app: kubelet-density-pod
+    spec:
+      replicas: 60
+      selector:
+        matchLabels:
+          app: kubelet-density-pod
+      template:
+        metadata:
+          labels:
+            app: kubelet-density-pod
+        spec:
+          containers:
+          - name: kubelet-density-container
+            image: {{.containerImage}}
+            ports:
+            - containerPort: 8080
+              protocol: TCP
+            imagePullPolicy: IfNotPresent
+            securityContext:
+              privileged: false
+kind: ConfigMap
+metadata:
+  name: kube-burner-configmap
